@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: Project Monitoring
+    folder: Project Management
+    type: file
+    options: { path: /var/lib/grafana/dashboards }
+
