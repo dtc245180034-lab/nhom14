@@ -32,7 +32,7 @@ services:
     depends_on: [app]
     networks: [frontend, monitoring]
     read_only: true
-    tmpfs: [/var/cache/nginx, /var/run]
+    tmpfs: [/tmp, /var/cache/nginx, /var/run]
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     restart: unless-stopped
