@@ -1,0 +1,119 @@
+name: project-management
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    networks: [backend, monitoring]
+    healthcheck: { test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}'], interval: 10s, timeout: 5s, retries: 5 }
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    restart: unless-stopped
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      PORT: 3000
+    depends_on: { postgres: { condition: service_healthy } }
+    networks: [frontend, backend, monitoring]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+  nginx:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    ports: ['8080:8080']
+    volumes: ['./nginx/nginx.conf:/etc/nginx/nginx.conf:ro']
+    depends_on: [app]
+    networks: [frontend, monitoring]
+    read_only: true
+    tmpfs: [/var/cache/nginx, /var/run]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+  pgadmin:
+    image: dpage/pgadmin4:9.8
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'True'
+    ports: ['5050:80']
+    depends_on: [postgres]
+    networks: [backend]
+    volumes: [pgadmin_data:/var/lib/pgadmin]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command: ['--config.file=/etc/prometheus/prometheus.yml','--storage.tsdb.path=/prometheus','--web.enable-lifecycle']
+    ports: ['9090:9090']
+    volumes: ['./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro', 'prometheus_data:/prometheus']
+    networks: [monitoring]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+  grafana:
+    image: grafana/grafana:12.1.1
+    environment: { GF_SECURITY_ADMIN_USER: '${GF_SECURITY_ADMIN_USER}', GF_SECURITY_ADMIN_PASSWORD: '${GF_SECURITY_ADMIN_PASSWORD}', GF_USERS_ALLOW_SIGN_UP: 'false' }
+    ports: ['3001:3000']
+    volumes: ['./grafana/provisioning:/etc/grafana/provisioning:ro','./grafana/dashboards:/var/lib/grafana/dashboards:ro','grafana_data:/var/lib/grafana']
+    depends_on: [prometheus, loki]
+    networks: [monitoring]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    privileged: true
+    volumes: ['/:/rootfs:ro','/var/run:/var/run:ro','/sys:/sys:ro','/var/lib/docker:/var/lib/docker:ro']
+    networks: [monitoring]
+    restart: unless-stopped
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.4.2
+    command: ['--nginx.scrape-uri=http://nginx:8080/nginx_status']
+    depends_on: [nginx]
+    networks: [monitoring]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    environment: { DATA_SOURCE_NAME: 'postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable' }
+    depends_on: { postgres: { condition: service_healthy } }
+    networks: [backend, monitoring]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+  loki:
+    image: grafana/loki:3.5.5
+    command: ['-config.file=/etc/loki/local-config.yaml']
+    volumes: ['./loki/loki-config.yml:/etc/loki/local-config.yaml:ro','loki_data:/loki']
+    networks: [monitoring]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+  promtail:
+    image: grafana/promtail:3.5.5
+    command: ['-config.file=/etc/promtail/config.yml']
+    volumes: ['./promtail/promtail-config.yml:/etc/promtail/config.yml:ro','/var/run/docker.sock:/var/run/docker.sock:ro','/var/lib/docker/containers:/var/lib/docker/containers:ro']
+    depends_on: [loki]
+    networks: [monitoring]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    restart: unless-stopped
+networks:
+  frontend: {}
+  backend: { internal: true }
+  monitoring: {}
+volumes:
+  postgres_data: {}
+  pgadmin_data: {}
+  prometheus_data: {}
+  grafana_data: {}
+  loki_data: {}
+
