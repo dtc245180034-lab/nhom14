@@ -1,0 +1,9 @@
+.env
+node_modules/
+*.log
+data/
+certs/*.key
+certs/*.crt
+promtail-positions.yaml
+.DS_Store
+

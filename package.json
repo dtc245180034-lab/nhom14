@@ -1,0 +1,2 @@
+{"name":"project-management-system","version":"1.0.0","private":true,"scripts":{"start":"node src/server.js","dev":"node --watch src/server.js","test":"node --test test/*.test.js"},"dependencies":{"express":"4.21.2","helmet":"8.0.0","pg":"8.13.1","prom-client":"15.1.3"}}
+
